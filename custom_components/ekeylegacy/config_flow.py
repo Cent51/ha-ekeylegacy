@@ -16,6 +16,10 @@ from .const import (
     DOMAIN,
     TYPE_HOME,
     TYPE_MULTI,
+    TYPE_NET,
+    TYPE_NET_V2,
+    TYPE_RARE,
+    TYPE_RARE_V2,
 )
 
 SCHEMA_DEVICE = vol.Schema(
@@ -26,6 +30,10 @@ SCHEMA_DEVICE = vol.Schema(
             (
                 TYPE_HOME,
                 TYPE_MULTI,
+                TYPE_NET,
+                TYPE_NET_V2,
+                TYPE_RARE,
+                TYPE_RARE_V2,
             )
         ),
     }
@@ -63,9 +71,4 @@ class EkeyLegacyFlowHandler(ConfigFlow, domain=DOMAIN):
 
 async def _async_has_devices(hass: HomeAssistant) -> bool:
     """Return if there are devices that can be discovered."""
-    # TODO Check if there are any devices that can be discovered in the network.
-    # devices = await hass.async_add_executor_job(my_pypi_dependency.discover)
     return False
-
-
-# config_entry_flow.register_discovery_flow(DOMAIN, "Ekey (legacy)", _async_has_devices)
