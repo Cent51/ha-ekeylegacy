@@ -48,6 +48,45 @@ Example packet: `1_00003_-----JOSEF_1_7_2_80156809150025_-GAR_1_-`
 | `action`        | `1`              | Action (`1` = access granted, `2` = access denied) |
 | `digital_input` | `-`              | Digital input ID                                   |
 
+### ekey net
+
+Example packet: 1_00046_4_80156809150025_000001
+
+| Attribute | Example | Description |
+| --- | --- | --- |
+| packet_type | 1 | Packet type |
+| user | 46 | User ID (leading zeros removed) |
+| finger | 4 | Finger ID ('1'-'9' for finger, '0' for no finger, 'P' for Pincode, '@' for RFID) |
+| scanner | 80156809150025 | Serial number of the finger scanner |
+| action | 000001 | Action code (000000 = None, 000001 = Enter, 000019 = Reject) |
+
+### ekey net v2
+
+Example packet: 2_00046_4_80156809150025_000000
+
+| Attribute | Example | Description |
+| --- | --- | --- |
+| packet_type | 2 | Packet type (net v2) |
+| user | 46 | User ID (leading zeros removed) |
+| finger | 4 | Finger / ID identifier |
+| scanner | 80156809150025 | Serial number of the finger scanner |
+| event | 000000 | Event ID from ekey net |
+
+
+### ekey rare / rare v2 (Binary Protocol)
+
+| Attribute | Description |
+| --- | --- |
+| version | UDP package version (3 for rare, 5 for rare v2) |
+| action / event_id | Action code or Event ID |
+| terminal_id | RS-485 address of the device |
+| scanner | Serial number of the finger scanner |
+| relay | Switched relay ID (0-4) |
+| user | User ID (leading zeros removed) |
+| finger | Finger or feature ID (0-16) |
+| event | Event name string |
+| time | Timestamp (jjjjmmdd hhmmss) |
+
 Unlike the home protocol, the multi protocol does not transmit the switched relay. Instead, the key ID is transmitted.
 
 ## FAQ
