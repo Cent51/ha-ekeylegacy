@@ -16,7 +16,19 @@
                 "data_description": {
                     "delimiter": "Which character separates the information",
                     "port": "Port which should be opened to receive the payloads",
-                    "type": "Home, Multi or rare protocol"
+                    "type": "Select the ekey protocol type"
+                }
+            }
+        },
+        "selector": {
+            "type": {
+                "options": {
+                    "home": "ekey home",
+                    "multi": "ekey multi",
+                    "net": "ekey net",
+                    "net v2": "ekey net v2",
+                    "rare": "ekey net (rare)",
+                    "rare v2": "ekey net (rare v2)"
                 }
             }
         }
