@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import struct
 
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.config_entries import ConfigEntry
@@ -43,49 +44,127 @@ class EkeyLegacyAuthEvent(EventEntity):
         )
 
     @callback
-    def async_handle_event(self, message: str) -> None:
+    def async_handle_event(self, data: bytes) -> None:
         """Handle the Ekey (legacy) event."""
-        parts = message.strip().split(self._conf_delimiter)
-
-        _LOGGER.info(
-            "Received event '%s'",
-            message,
-        )
-
         is_successful = False
+        event_data = {}
 
-        if self._conf_type == "home" and len(parts) == 6:
-            event_data = {
-                "type": parts[0],
-                "user": parts[1].lstrip("0"),
-                "finger": parts[2],
-                "scanner": parts[3],
-                "action": parts[4],
-                "relay": parts[5],
-            }
+        # Handle binary rare protocols
+        if self._conf_type in ("rare", "rare v2"):
+            try:
+                # rare/rare v2 binary format parsing based on documentation
+                # Version (4 bytes uint32), followed by ActionCode/EventID, TerminalID, Serial, Relay, Reserved, UserID, FingerID, Event, Time, Name, PersonalNum
+                if len(data) < 4:
+                    return
+                version = struct.unpack_from("<I", data, 0)[0]
+                
+                if self._conf_type == "rare" and version == 3:
+                    # Format rare (Table 110)[cite: 1]
+                    # <I (version), I (action_code), I (terminal_id), 14s (serial), B (relay), B (reserved), I (user_id), I (finger_id), 16s (event), 16s (time)
+                    unpacked = struct.unpack_from("<III 14s BB II 16s 16s", data, 0)
+                    event_data = {
+                        "version": unpacked[0],
+                        "action": str(unpacked[1]),
+                        "terminal_id": hex(unpacked[2]),
+                        "scanner": unpacked[3].decode("ascii", errors="ignore").strip(),
+                        "relay": unpacked[4],
+                        "user": str(unpacked[6]).lstrip("0"),
+                        "finger": str(unpacked[7]),
+                        "event": unpacked[8].decode("ascii", errors="ignore").strip(),
+                        "time": unpacked[9].decode("ascii", errors="ignore").strip(),
+                    }
+                    if event_data["action"] == "1":
+                        is_successful = True
 
-            if event_data["action"] == "1":
-                is_successful = True
-
-        elif self._conf_type == "multi" and len(parts) == 10:
-            event_data = {
-                "type": parts[0],
-                "user": parts[1].lstrip("0"),
-                "user_name": parts[2].lstrip("-"),
-                "user_status": parts[3],
-                "finger": parts[4],
-                "key": parts[5],
-                "scanner": parts[6],
-                "scanner_name": parts[7].lstrip("-"),
-                "action": parts[8],
-                "digital_input": parts[9],
-            }
-
-            if event_data["action"] == "1":
-                is_successful = True
+                elif self._conf_type == "rare v2" and version == 5:
+                    # Format rare v2 (Table 111)[cite: 2, 3]
+                    unpacked = struct.unpack_from("<III 14s BB II 16s 16s", data, 0)
+                    event_data = {
+                        "version": unpacked[0],
+                        "event_id": str(unpacked[1]),
+                        "terminal_id": hex(unpacked[2]),
+                        "scanner": unpacked[3].decode("ascii", errors="ignore").strip(),
+                        "relay": unpacked[4],
+                        "user": str(unpacked[6]).lstrip("0"),
+                        "finger": str(unpacked[7]),
+                        "event": unpacked[8].decode("ascii", errors="ignore").strip(),
+                        "time": unpacked[9].decode("ascii", errors="ignore").strip(),
+                    }
+                    # Bei rare v2 wird die Authentifizierung meist über Ereignisse definiert; 
+                    # standardmäßig werten wir es aus, wenn Relais aktiv ist oder Action/Event vorliegt.
+                    if unpacked[4] > 0:
+                        is_successful = True
+                else:
+                    return
+            except Exception as ex:
+                _LOGGER.error("Failed to parse binary rare packet: %s", ex)
+                return
 
         else:
-            return
+            # Handle text-based protocols (home, multi, net, net v2)
+            message = data.decode("ascii", errors="ignore")
+            parts = message.strip().split(self._conf_delimiter)
+
+            _LOGGER.info(
+                "Received event '%s'",
+                message,
+            )
+
+            if self._conf_type == "home" and len(parts) == 6:
+                event_data = {
+                    "type": parts[0],
+                    "user": parts[1].lstrip("0"),
+                    "finger": parts[2],
+                    "scanner": parts[3],
+                    "action": parts[4],
+                    "relay": parts[5],
+                }
+                if event_data["action"] == "1":
+                    is_successful = True
+
+            elif self._conf_type == "multi" and len(parts) == 10:
+                event_data = {
+                    "type": parts[0],
+                    "user": parts[1].lstrip("0"),
+                    "user_name": parts[2].lstrip("-"),
+                    "user_status": parts[3],
+                    "finger": parts[4],
+                    "key": parts[5],
+                    "scanner": parts[6],
+                    "scanner_name": parts[7].lstrip("-"),
+                    "action": parts[8],
+                    "digital_input": parts[9],
+                }
+                if event_data["action"] == "1":
+                    is_successful = True
+
+            elif self._conf_type == "net" and len(parts) >= 5:
+                # Protokollformat net (Table 112)[cite: 4]: Pakettyp, BenutzerID, FingerID, Seriennummer, AktionsCode
+                event_data = {
+                    "packet_type": parts[0],
+                    "user": parts[1].lstrip("0"),
+                    "finger": parts[2],
+                    "scanner": parts[3],
+                    "action": parts[4],
+                }
+                if event_data.get("action") == "000001":
+                    is_successful = True
+
+            elif self._conf_type == "net v2" and len(parts) >= 5:
+                # Protokollformat net v2 (Table 113)[cite: 4, 5]: Pakettyp, BenutzerID, ID, Seriennummer, Ereignis
+                event_data = {
+                    "packet_type": parts[0],
+                    "user": parts[1].lstrip("0"),
+                    "finger": parts[2],
+                    "scanner": parts[3],
+                    "event": parts[4],
+                }
+                # Net v2 sendet Ereignis-IDs (z.B. erfolgreicher Zutritt)
+                if event_data.get("event") != "000000":
+                    is_successful = True
+
+            else:
+                return
 
         if is_successful:
             self._trigger_event("authenticated", event_data)
@@ -109,8 +188,7 @@ class _EkeyUDPProtocol(asyncio.DatagramProtocol):
         self.entity = entity
 
     def datagram_received(self, data: bytes, addr) -> None:
-        message = data.decode("ascii", errors="ignore")
-        self.entity.async_handle_event(message)
+        self.entity.async_handle_event(data)
 
 
 async def async_setup_entry(
