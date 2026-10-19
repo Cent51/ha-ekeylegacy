@@ -73,7 +73,7 @@ Example packet: 2_00046_4_80156809150025_000000
 | event | 000000 | Event ID from ekey net |
 
 
-### ekey rare / rare v2 (Binary Protocol)
+### ekey rare / rare v2 (net) (Binary Protocol)
 
 | Attribute | Description |
 | --- | --- |
